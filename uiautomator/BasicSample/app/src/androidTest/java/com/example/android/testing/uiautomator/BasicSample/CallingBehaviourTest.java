@@ -23,7 +23,7 @@ import android.support.test.filters.SdkSuppress;
 import android.support.test.runner.AndroidJUnit4;
 import android.support.test.uiautomator.By;
 import android.support.test.uiautomator.UiDevice;
-import android.support.test.uiautomator.UiObject2;
+import android.support.test.uiautomator.UiObjectNotFoundException;
 import android.support.test.uiautomator.Until;
 
 import org.junit.Before;
@@ -32,6 +32,7 @@ import org.junit.runner.RunWith;
 
 import java.io.IOException;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -42,11 +43,11 @@ import static org.junit.Assert.assertTrue;
 
 public class CallingBehaviourTest {
 
-
-    private static final int LAUNCH_TIMEOUT = 5000;
+    private static final int TIMEOUT = 5000;
 
     public static UiDevice mDevice;
 
+    //Starts the Rebtel app at from its previous state before every test
     @Before
     public void startMainActivityFromHomeScreen() {
         // Initialize UiDevice instance
@@ -55,85 +56,102 @@ public class CallingBehaviourTest {
         // Start from the home screen
         mDevice.pressHome();
 
-        /**Wait for launcher
-         final String launcherPackage = getLauncherPackageName();
-         assertThat(launcherPackage, notNullValue());
-         mDevice.wait(Until.hasObject(By.pkg(launcherPackage).depth(0)), LAUNCH_TIMEOUT);*/
-
-        // Launch the blueprint app
+        // Launch the app
         Context context = InstrumentationRegistry.getContext();
         final Intent intent = context.getPackageManager()
-                .getLaunchIntentForPackage(Strings.BASIC_SAMPLE_PACKAGE);
+                .getLaunchIntentForPackage(STRING.PACKAGE_NAME);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);    // Clear out any previous instances
         context.startActivity(intent);
 
         // Wait for the app to appear
-        mDevice.wait(Until.hasObject(By.pkg(Strings.BASIC_SAMPLE_PACKAGE).depth(0)), LAUNCH_TIMEOUT);
+        mDevice.wait(Until.hasObject(By.pkg(STRING.PACKAGE_NAME).depth(0)), TIMEOUT);
     }
 
+    /**
+     * Tests the login functionality in Rebtel
+     *
+     * @throws InterruptedException
+     * @throws UiObjectNotFoundException
+     * @throws IOException
+     */
     @Test
-    public void getStarted() throws InterruptedException {
+    public void getStarted() throws InterruptedException, UiObjectNotFoundException, IOException {
         // Press the button.
-        mDevice.findObject(By.res(Strings.BASIC_SAMPLE_PACKAGE, "getStartedButton"))
+        mDevice.findObject(By.res(STRING.PACKAGE_NAME, STRING.ID.GET_STARTED_BUTTON))
                 .click();
 
-        // Verify if the new screen has appeared
-        //hread.sleep(5000);
-        assertTrue("Phone number slot unavailable", waitUntilAppear(5000, "sign_up_headline"));
+        // Verify if the registration screen has appeared
+        assertTrue("Phone number slot unavailable", waitUntilAppear(TIMEOUT, STRING.TEXT.VERIFY_YOUR_NUMBER));
 
+        //Get the text of the input field
+        String inputText = mDevice.findObject(By.res(STRING.PACKAGE_NAME, STRING.ID.PHONE_NUMBER_REGISTRATION))
+                .getText();
+
+        // Clear text if available
+        if (null != inputText && !inputText.isEmpty()) {
+            for (int i = 0; i < inputText.length(); i++) {
+                mDevice.executeShellCommand("input keyevent KEYCODE_DEL");
+            }
+        }
+
+        //Check if the Continue button is enabled
+        assertFalse("Continue button is enabled", mDevice.hasObject(By.res(STRING.PACKAGE_NAME, inputText).enabled(true)));
 
         // Type phone number
-        mDevice.findObject(By.res(Strings.BASIC_SAMPLE_PACKAGE, "inputPhoneNumber"))
-                .setText(Strings.PHONE_NUMBER);
-
-        //Thread.sleep(5000);
-        UiObject2 inputField = mDevice.wait(Until.findObject(By.res(Strings.BASIC_SAMPLE_PACKAGE, "inputPhoneNumber")), LAUNCH_TIMEOUT);
+        mDevice.findObject(By.res(STRING.PACKAGE_NAME, STRING.ID.PHONE_NUMBER_REGISTRATION))
+                .setText(inputText);
 
         // Press the continue button.
-        mDevice.findObject(By.res(Strings.BASIC_SAMPLE_PACKAGE, "verifyButton"))
+        mDevice.findObject(By.res(STRING.PACKAGE_NAME, STRING.ID.CONTINUE_BUTTON))
                 .click();
-        assertTrue("Phone number is not typed", waitUntilGone("verifyButton"));
 
         //Wait for SMS Verification
-        Thread.sleep(10000);
+        assertTrue("SMS confirmation did not finish", waitUntilAppear(10000, "successText") ||
+                mDevice.wait(Until.hasObject
+                        (By.res(STRING.PACKAGE_NAME, STRING.ID.PAGER_SCREEN)), TIMEOUT));
     }
 
     @Test
     public void dialNumber() throws InterruptedException, IOException {
         // Press the dial pad button from top bar
-        mDevice.findObject(By.desc("dialpad")).click();
+        mDevice.findObject(By.desc(STRING.TEXT.DIAL_PAD_ICON)).click();
+        assertTrue("Dial pad is not opened", mDevice.wait(Until.hasObject
+                (By.res(STRING.PACKAGE_NAME, STRING.ID.DIAL_PAD_TEXT_HOLDER)), TIMEOUT));
 
-        // Clear text
-        for(int i=0; i<3 ; i++) {
-            Thread.sleep(500);
-            mDevice.findObject(By.desc("Erase")).click();
-        }
+        //Clear the input field
+        mDevice.findObject(By.res(STRING.PACKAGE_NAME, STRING.ID.DIAL_PAD_TEXT_HOLDER)).longClick();
+        mDevice.executeShellCommand("input keyevent KEYCODE_DEL");
 
         //Dial a phone number
-        mDevice.findObject(By.desc("Pressed numbers")).setText(Strings.PHONE_NUMBER);
+        mDevice.findObject(By.res(STRING.PACKAGE_NAME, STRING.ID.DIAL_PAD_TEXT_HOLDER)).setText(STRING.PHONE_NUMBER);
 
         //Press dial
-        mDevice.findObject(By.desc("Call")).click();
+        mDevice.findObject(By.desc(STRING.TEXT.CALL_BUTTON)).click();
 
         //Wait to place call
-        Thread.sleep(5000);
+        Thread.sleep(10000);
 
         //Hang up call
+        //mDevice.pressKeyCode(6);
         mDevice.executeShellCommand("input keyevent KEYCODE_ENDCALL");
-        Thread.sleep(5000);
+        assertTrue("Did not return t application", mDevice.wait(Until.hasObject
+                (By.res(STRING.PACKAGE_NAME, STRING.ID.PAGER_SCREEN)), TIMEOUT));
 
         // Press the home button from top bar
         mDevice.findObject(By.desc("recent")).click();
+        assertTrue("Did not open pager", mDevice.wait(Until.hasObject
+                (By.res(STRING.PACKAGE_NAME, STRING.ID.PAGER_SCREEN)), TIMEOUT));
 
         //Check if has an entry
-        assertTrue("Entry not found correctly", mDevice.hasObject(By.text(Strings.PHONE_NUMBER)));
+        assertTrue("Entry not found correctly", mDevice.hasObject(By.text(STRING.PHONE_NUMBER)));
 
     }
+
     public Boolean waitUntilAppear(int timeout, String label) {
-        return mDevice.wait(Until.hasObject(By.res(Strings.BASIC_SAMPLE_PACKAGE, label)), timeout);
+        return mDevice.wait(Until.hasObject(By.res(STRING.PACKAGE_NAME, label)), timeout);
     }
 
     public static Boolean waitUntilGone(String label) {
-        return mDevice.wait(Until.gone(By.res(Strings.BASIC_SAMPLE_PACKAGE, label)), LAUNCH_TIMEOUT);
+        return mDevice.wait(Until.gone(By.res(STRING.PACKAGE_NAME, label)), TIMEOUT);
     }
 }
